@@ -1,0 +1,472 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Algoritma A*</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;700;900&display=swap');
+        
+        body {
+            font-family: 'Space Grotesk', sans-serif;
+            background-color: #f4f0ea;
+            background-image: radial-gradient(#000 1px, transparent 1px);
+            background-size: 20px 20px;
+        }
+
+        /* Gaya brutalism dasar */
+        .brutal-border {
+            border: 4px solid #000;
+        }
+        .brutal-shadow {
+            box-shadow: 6px 6px 0px 0px #000;
+        }
+        .brutal-shadow-sm {
+            box-shadow: 3px 3px 0px 0px #000;
+        }
+        .brutal-btn {
+            transition: all 0.1s;
+        }
+        .brutal-btn:active {
+            transform: translate(4px, 4px);
+            box-shadow: 0px 0px 0px 0px #000;
+        }
+
+        /* Animasi Grid dengan gaya Mekanis */
+        .cell {
+            transition: background-color 0s;
+        }
+        .cell-visited {
+            background-color: #f472b6;
+            animation: popIn 0.2s steps(2) forwards;
+        }
+        
+        /* JALUR AKHIR WARNA MAGENTA TERANG */
+        .cell-path {
+            background-color: #ff00ff;
+            border: 4px solid #000;
+            z-index: 10;
+            animation: popPath 0.5s ease-out forwards, pulsePath 1s infinite alternate 0.5s;
+        }
+
+        @keyframes popIn {
+            0% { transform: scale(0.8); }
+            100% { transform: scale(1); }
+        }
+
+        /* Animasi munculnya jalur */
+        @keyframes popPath {
+            0% { transform: scale(0.5); opacity: 0; }
+            100% { transform: scale(1.1); opacity: 1; box-shadow: 6px 6px 0px 0px #000; }
+        }
+
+        /* Animasi denyut setelah jalur terbentuk */
+        @keyframes pulsePath {
+            0% { transform: scale(1.1); box-shadow: 6px 6px 0px 0px #000; }
+            100% { transform: scale(1.05); box-shadow: 2px 2px 0px 0px #000; }
+        }
+        
+        #grid-container {
+            grid-template-columns: repeat(15, minmax(0, 1fr));
+        }
+
+        /* Kedipan keras untuk node aktif */
+        .hard-blink {
+            animation: blinker 0.4s steps(2) infinite;
+        }
+        @keyframes blinker {
+            50% { background-color: #fff; color: #000; }
+        }
+    </style>
+</head>
+<body class="text-black min-h-screen p-4 md:p-8">
+
+    <header class="bg-[#a3e635] brutal-border brutal-shadow p-6 mb-8 text-center max-w-[1400px] mx-auto">
+        <h1 class="text-4xl md:text-5xl font-black uppercase tracking-tighter">Visualisasi Algoritma A*</h1>
+        <p class="mt-2 text-lg font-bold border-t-4 border-black pt-2 inline-block">f(n) = g(n) + h(n)</p>
+    </header>
+
+    <main class="max-w-[1400px] mx-auto grid grid-cols-1 xl:grid-cols-12 gap-8">
+        
+        <section class="xl:col-span-7 bg-white brutal-border brutal-shadow p-6 flex flex-col justify-between">
+            <div>
+                <h2 class="text-2xl font-black mb-4 uppercase bg-[#22d3ee] inline-block px-3 py-1 brutal-border brutal-shadow-sm">
+                    Kanvas Peta
+                </h2>
+                
+                <p class="text-sm font-bold mb-5 bg-[#fde047] p-3 brutal-border">
+                    TARIK & GESER KURSOR untuk membuat dinding rintangan. Tekan MULAI untuk melihat pencarian.
+                </p>
+
+                <div class="flex justify-center mb-6">
+                    <div id="grid-container" class="grid gap-0 brutal-border brutal-shadow bg-black p-1 select-none cursor-pointer w-full max-w-[600px] aspect-square">
+                        </div>
+                </div>
+
+                <div class="bg-white p-4 brutal-border brutal-shadow-sm font-bold text-xs md:text-sm">
+                    <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-3">
+                        <div class="flex items-center gap-2"><div class="w-6 h-6 bg-[#4ade80] brutal-border"></div> START</div>
+                        <div class="flex items-center gap-2"><div class="w-6 h-6 bg-[#f87171] brutal-border"></div> GOAL</div>
+                        <div class="flex items-center gap-2"><div class="w-6 h-6 bg-black brutal-border"></div> DINDING</div>
+                        <div class="flex items-center gap-2"><div class="w-6 h-6 bg-[#ff00ff] brutal-border"></div> JALUR AKHIR</div>
+                        <div class="flex items-center gap-2"><div class="w-6 h-6 bg-[#8b5cf6] brutal-border"></div> AKTIF</div>
+                        <div class="flex items-center gap-2"><div class="w-6 h-6 bg-[#22d3ee] brutal-border"></div> OPEN SET</div>
+                        <div class="flex items-center gap-2"><div class="w-6 h-6 bg-[#f472b6] brutal-border"></div> CLOSED SET</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="mt-6 p-4 bg-[#e5e5e5] brutal-border flex flex-wrap gap-4 justify-between items-center">
+                <div class="flex flex-wrap gap-3 w-full sm:w-auto">
+                    <button id="btn-start" class="brutal-btn flex-1 sm:flex-none px-6 py-3 bg-[#a3e635] brutal-border brutal-shadow-sm font-black uppercase text-sm">
+                        Mulai Pencarian
+                    </button>
+                    <button id="btn-clear-walls" class="brutal-btn flex-1 sm:flex-none px-4 py-3 bg-white brutal-border brutal-shadow-sm font-bold uppercase text-sm">
+                        Hapus Dinding
+                    </button>
+                    <button id="btn-reset" class="brutal-btn flex-1 sm:flex-none px-4 py-3 bg-[#f87171] brutal-border brutal-shadow-sm font-bold uppercase text-white text-sm">
+                        Reset Peta
+                    </button>
+                </div>
+                <div class="flex items-center gap-3 w-full sm:w-auto bg-white p-2 brutal-border">
+                    <label class="text-sm font-bold uppercase">Kecepatan</label>
+                    <input id="speed-range" type="range" min="1" max="200" value="80" class="w-24 border-2 border-black accent-black">
+                </div>
+            </div>
+        </section>
+
+        <section class="xl:col-span-5 flex flex-col gap-8">
+            
+            <div class="bg-[#8b5cf6] brutal-border brutal-shadow p-6 text-white">
+                <h3 class="text-2xl font-black mb-4 uppercase bg-black text-white inline-block px-3 py-1">
+                    Pelacakan Skor Aktif
+                </h3>
+                
+                <div id="calc-panel-empty" class="bg-white text-black brutal-border p-6 font-bold text-center">
+                    MENUNGGU ALGORITMA BERJALAN...
+                </div>
+
+                <div id="calc-panel-content" class="hidden bg-white text-black brutal-border p-5 space-y-4 font-black">
+                    <div class="flex justify-between items-center bg-[#e5e5e5] p-2 brutal-border">
+                        <span class="uppercase">Posisi Node</span>
+                        <div id="calc-node-coords" class="text-xl bg-black text-white px-2">[-,-]</div>
+                    </div>
+                    
+                    <div class="grid grid-cols-2 gap-4">
+                        <div class="brutal-border p-3 flex flex-col items-center bg-[#4ade80]">
+                            <span class="text-sm uppercase mb-1">Actual Cost g(n)</span>
+                            <div id="calc-g-val" class="text-4xl bg-white brutal-border w-full text-center py-2">0</div>
+                        </div>
+                        <div class="brutal-border p-3 flex flex-col items-center bg-[#f87171]">
+                            <span class="text-sm uppercase mb-1">Heuristic h(n)</span>
+                            <div id="calc-h-val" class="text-4xl bg-white brutal-border w-full text-center py-2">0</div>
+                        </div>
+                    </div>
+                    
+                    <div class="brutal-border p-4 flex flex-col items-center bg-[#fde047]">
+                        <span class="text-sm uppercase mb-1">Total Cost f(n)</span>
+                        <div id="calc-f-val" class="text-6xl text-center">0</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="bg-white brutal-border brutal-shadow p-6">
+                <h3 class="text-xl font-black mb-4 uppercase border-b-4 border-black pb-2">Kamus Algoritma</h3>
+                <ul class="space-y-4 font-bold text-sm">
+                    <li class="flex gap-3">
+                        <span class="bg-[#4ade80] brutal-border px-2 py-1 text-black h-fit">g(n)</span>
+                        <p>Biaya riil/aktual yang sudah dihabiskan dari titik Start ke Node saat ini.</p>
+                    </li>
+                    <li class="flex gap-3">
+                        <span class="bg-[#f87171] brutal-border px-2 py-1 text-black h-fit">h(n)</span>
+                        <p>Estimasi (Heuristik) jarak lurus dari Node saat ini ke titik Goal.</p>
+                    </li>
+                    <li class="flex gap-3">
+                        <span class="bg-[#fde047] brutal-border px-2 py-1 text-black h-fit">f(n)</span>
+                        <p>Total estimasi biaya. Algoritma akan mencari rute dengan <strong>total cost terkecil</strong>.</p>
+                    </li>
+                </ul>
+            </div>
+        </section>
+    </main>
+
+    <script>
+        const GRID_SIZE = 15;
+        const gridContainer = document.getElementById('grid-container');
+        let grid = [];
+        let startNode = null;
+        let endNode = null;
+        let isMouseDown = false;
+        let isSearching = false;
+
+        const calcEmpty = document.getElementById('calc-panel-empty');
+        const calcContent = document.getElementById('calc-panel-content');
+
+        class Node {
+            constructor(row, col) {
+                this.row = row;
+                this.col = col;
+                this.isStart = (row === 2 && col === 2);
+                this.isEnd = (row === GRID_SIZE - 3 && col === GRID_SIZE - 3);
+                this.isWall = false;
+                this.g = Infinity;
+                this.h = Infinity;
+                this.f = Infinity;
+                this.parent = null;
+                this.element = null;
+                this.scoreElement = null;
+            }
+        }
+
+        function initGrid() {
+            gridContainer.innerHTML = '';
+            grid = [];
+
+            for (let r = 0; r < GRID_SIZE; r++) {
+                let currentRow = [];
+                for (let c = 0; c < GRID_SIZE; c++) {
+                    const node = new Node(r, c);
+                    if (node.isStart) startNode = node;
+                    if (node.isEnd) endNode = node;
+                    
+                    const cellDiv = document.createElement('div');
+                    cellDiv.className = 'cell bg-white border border-black w-full h-full flex flex-col items-center justify-center relative overflow-hidden font-bold';
+                    
+                    if (node.isStart) {
+                        cellDiv.classList.replace('bg-white', 'bg-[#4ade80]');
+                        cellDiv.classList.add('border-2');
+                    }
+                    if (node.isEnd) {
+                        cellDiv.classList.replace('bg-white', 'bg-[#f87171]');
+                        cellDiv.classList.add('border-2');
+                    }
+                    
+                    const scoreContainer = document.createElement('div');
+                    scoreContainer.classList.add('hidden', 'w-full', 'h-full', 'flex', 'flex-col', 'items-center', 'justify-center', 'text-[9px]', 'leading-none');
+                    
+                    scoreContainer.innerHTML = `
+                        <div class="flex gap-1 mb-0.5">
+                            <span class="score-g text-[#166534]"></span>
+                            <span class="score-h text-[#991b1b]"></span>
+                        </div>
+                        <div class="font-black text-[12px] score-f text-black"></div>
+                    `;
+
+                    cellDiv.appendChild(scoreContainer);
+                    node.element = cellDiv;
+                    node.scoreElement = scoreContainer;
+                    
+                    cellDiv.addEventListener('mousedown', () => {
+                        if (isSearching || node.isStart || node.isEnd) return;
+                        isMouseDown = true;
+                        toggleWall(node);
+                    });
+                    cellDiv.addEventListener('mouseenter', () => {
+                        if (isMouseDown && !isSearching && !node.isStart && !node.isEnd) {
+                            toggleWall(node);
+                        }
+                    });
+
+                    gridContainer.appendChild(cellDiv);
+                    currentRow.push(node);
+                }
+                grid.push(currentRow);
+            }
+        }
+
+        window.addEventListener('mouseup', () => isMouseDown = false);
+
+        function toggleWall(node) {
+            node.isWall = !node.isWall;
+            if (node.isWall) {
+                node.element.classList.remove('bg-white', 'cell-visited', 'cell-path');
+                node.element.classList.add('bg-black');
+                node.scoreElement.classList.add('hidden');
+            } else {
+                node.element.classList.remove('bg-black');
+                node.element.classList.add('bg-white');
+            }
+        }
+
+        function updateCellScore(node) {
+            if (node.isStart || node.isWall) return;
+            node.scoreElement.classList.remove('hidden');
+            node.scoreElement.querySelector('.score-g').textContent = isFinite(node.g) ? `g${node.g}` : '';
+            node.scoreElement.querySelector('.score-h').textContent = isFinite(node.h) ? `h${node.h}` : '';
+            node.scoreElement.querySelector('.score-f').textContent = isFinite(node.f) ? `f${node.f}` : '';
+        }
+
+        function updateLiveCalcPanel(node) {
+            if (node === startNode || node === endNode) return;
+            calcEmpty.classList.add('hidden');
+            calcContent.classList.remove('hidden');
+            document.getElementById('calc-node-coords').textContent = `[R:${node.row}, C:${node.col}]`;
+            document.getElementById('calc-g-val').textContent = node.g;
+            document.getElementById('calc-h-val').textContent = node.h;
+            document.getElementById('calc-f-val').textContent = node.f;
+        }
+
+        function getHeuristic(nodeA, nodeB) {
+            return Math.abs(nodeA.row - nodeB.row) + Math.abs(nodeA.col - nodeB.col);
+        }
+
+        function getNeighbors(node) {
+            const neighbors = [];
+            const { row, col } = node;
+            if (row > 0) neighbors.push(grid[row - 1][col]);
+            if (row < GRID_SIZE - 1) neighbors.push(grid[row + 1][col]);
+            if (col > 0) neighbors.push(grid[row][col - 1]);
+            if (col < GRID_SIZE - 1) neighbors.push(grid[row][col + 1]);
+            return neighbors;
+        }
+
+        function sleep(ms) {
+            return new Promise(resolve => setTimeout(resolve, ms));
+        }
+
+        async function runAStar() {
+            if (isSearching) return;
+            isSearching = true;
+
+            const speedInput = document.getElementById('speed-range');
+            const getDelay = () => 205 - parseInt(speedInput.value);
+
+            resetVisualizationData();
+            
+            let openSet = [startNode];
+            startNode.g = 0;
+            startNode.h = getHeuristic(startNode, endNode);
+            startNode.f = startNode.h;
+
+            while (openSet.length > 0) {
+                let currentIndex = 0;
+                for (let i = 1; i < openSet.length; i++) {
+                    if (openSet[i].f < openSet[currentIndex].f) {
+                        currentIndex = i;
+                    }
+                }
+                let current = openSet[currentIndex];
+
+                if (current !== startNode && current !== endNode) {
+                    current.element.classList.remove('bg-[#22d3ee]', 'cell-visited');
+                    current.element.classList.add('bg-[#8b5cf6]', 'border-4', 'border-black', 'hard-blink', 'text-white');
+                    current.scoreElement.querySelector('.score-f').classList.replace('text-black', 'text-white');
+                    current.scoreElement.querySelector('.score-g').classList.replace('text-[#166534]', 'text-green-300');
+                    current.scoreElement.querySelector('.score-h').classList.replace('text-[#991b1b]', 'text-red-300');
+                }
+
+                updateLiveCalcPanel(current);
+                await sleep(getDelay());
+
+                if (current === endNode) {
+                    endNode.element.classList.remove('hard-blink');
+                    await drawShortestPath(current);
+                    isSearching = false;
+                    return;
+                }
+
+                openSet.splice(currentIndex, 1);
+                current.isClosed = true;
+
+                if (current !== startNode && current !== endNode) {
+                    current.element.classList.remove('bg-[#8b5cf6]', 'border-4', 'hard-blink', 'text-white');
+                    current.element.classList.add('cell-visited');
+                    current.scoreElement.querySelector('.score-f').classList.replace('text-white', 'text-black');
+                    current.scoreElement.querySelector('.score-g').classList.replace('text-green-300', 'text-[#166534]');
+                    current.scoreElement.querySelector('.score-h').classList.replace('text-red-300', 'text-[#991b1b]');
+                }
+
+                const neighbors = getNeighbors(current);
+                for (let neighbor of neighbors) {
+                    if (neighbor.isWall || neighbor.isClosed) continue;
+
+                    let tentativeG = current.g + 1;
+                    if (tentativeG < neighbor.g) {
+                        neighbor.parent = current;
+                        neighbor.g = tentativeG;
+                        neighbor.h = getHeuristic(neighbor, endNode);
+                        neighbor.f = neighbor.g + neighbor.h;
+
+                        updateCellScore(neighbor);
+
+                        if (!openSet.includes(neighbor)) {
+                            openSet.push(neighbor);
+                            if (neighbor !== endNode) {
+                                neighbor.element.classList.add('bg-[#22d3ee]'); // Open set color
+                            }
+                        }
+                    }
+                }
+            }
+            alert("JALUR BUNTU!");
+            isSearching = false;
+        }
+
+        async function drawShortestPath(endNode) {
+            let temp = endNode.parent;
+            calcEmpty.classList.remove('hidden');
+            calcContent.classList.add('hidden');
+            calcEmpty.textContent = "RUTE TERPENDEK DITEMUKAN!";
+            calcEmpty.classList.replace('bg-white', 'bg-[#ff00ff]'); // Mengubah warna notifikasi ke Magenta
+            calcEmpty.classList.add('text-white');
+            
+            while (temp && temp !== startNode) {
+                temp.scoreElement.classList.add('hidden');
+                temp.element.classList.remove('cell-visited', 'bg-[#22d3ee]');
+                temp.element.classList.add('cell-path');
+                temp = temp.parent;
+                await sleep(50);
+            }
+        }
+
+        function resetVisualizationData() {
+            for (let r = 0; r < GRID_SIZE; r++) {
+                for (let c = 0; c < GRID_SIZE; c++) {
+                    const node = grid[r][c];
+                    node.g = Infinity;
+                    node.h = Infinity;
+                    node.f = Infinity;
+                    node.parent = null;
+                    node.isClosed = false;
+                    
+                    if (!node.isStart && !node.isEnd && !node.isWall) {
+                        node.scoreElement.classList.add('hidden');
+                        node.element.className = 'cell bg-white border border-black w-full h-full flex flex-col items-center justify-center relative overflow-hidden font-bold';
+                        
+                        const fText = node.scoreElement.querySelector('.score-f');
+                        const gText = node.scoreElement.querySelector('.score-g');
+                        const hText = node.scoreElement.querySelector('.score-h');
+                        fText.classList.remove('text-white'); fText.classList.add('text-black');
+                        gText.classList.remove('text-green-300'); gText.classList.add('text-[#166534]');
+                        hText.classList.remove('text-red-300'); hText.classList.add('text-[#991b1b]');
+                    }
+                }
+            }
+            calcEmpty.classList.remove('hidden');
+            calcContent.classList.add('hidden');
+            calcEmpty.textContent = "MENUNGGU ALGORITMA BERJALAN...";
+            calcEmpty.classList.remove('bg-[#ff00ff]', 'text-white');
+            calcEmpty.classList.add('bg-white', 'text-black');
+        }
+
+        document.getElementById('btn-start').addEventListener('click', runAStar);
+        document.getElementById('btn-clear-walls').addEventListener('click', () => {
+            if (isSearching) return;
+            for (let r = 0; r < GRID_SIZE; r++) {
+                for (let c = 0; c < GRID_SIZE; c++) {
+                    if (grid[r][c].isWall) toggleWall(grid[r][c]);
+                }
+            }
+            resetVisualizationData();
+        });
+        document.getElementById('btn-reset').addEventListener('click', () => {
+            if (isSearching) return;
+            initGrid();
+            resetVisualizationData();
+        });
+
+        initGrid();
+    </script>
+</body>
+</html>
