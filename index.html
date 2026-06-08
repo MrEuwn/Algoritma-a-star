@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Algoritma A Star</title>
+    <title>Algoritma A*</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;700;900&display=swap');
@@ -36,6 +36,8 @@
         /* Animasi Grid dengan gaya Mekanis */
         .cell {
             transition: background-color 0s;
+            aspect-ratio: 1 / 1; 
+            cursor: pointer;
         }
         .cell-visited {
             background-color: #f472b6;
@@ -44,10 +46,14 @@
         
         /* JALUR AKHIR WARNA MAGENTA TERANG */
         .cell-path {
-            background-color: #ff00ff;
+            background-color: #ff00ff; 
             border: 4px solid #000;
+            color: white !important; 
             z-index: 10;
             animation: popPath 0.5s ease-out forwards, pulsePath 1s infinite alternate 0.5s;
+        }
+        .cell-path .score-f {
+            color: white !important;
         }
 
         @keyframes popIn {
@@ -55,13 +61,11 @@
             100% { transform: scale(1); }
         }
 
-        /* Animasi munculnya jalur */
         @keyframes popPath {
             0% { transform: scale(0.5); opacity: 0; }
             100% { transform: scale(1.1); opacity: 1; box-shadow: 6px 6px 0px 0px #000; }
         }
 
-        /* Animasi denyut setelah jalur terbentuk */
         @keyframes pulsePath {
             0% { transform: scale(1.1); box-shadow: 6px 6px 0px 0px #000; }
             100% { transform: scale(1.05); box-shadow: 2px 2px 0px 0px #000; }
@@ -69,121 +73,131 @@
         
         #grid-container {
             grid-template-columns: repeat(15, minmax(0, 1fr));
+            grid-template-rows: repeat(15, minmax(0, 1fr)); 
+            /* Mencegah layar scroll ikut terseret saat menggambar di grid (Mobile) */
+            touch-action: none; 
         }
 
-        /* Kedipan keras untuk node aktif */
         .hard-blink {
             animation: blinker 0.4s steps(2) infinite;
         }
         @keyframes blinker {
             50% { background-color: #fff; color: #000; }
         }
+        
+        /* Indikator visual saat di-drag */
+        .dragging-node {
+            transform: scale(1.1);
+            z-index: 20;
+            box-shadow: 4px 4px 0px 0px #000;
+        }
     </style>
 </head>
-<body class="text-black min-h-screen p-4 md:p-8">
+<body class="text-black min-h-screen p-3 sm:p-4 md:p-8">
 
-    <header class="bg-[#a3e635] brutal-border brutal-shadow p-6 mb-8 text-center max-w-[1400px] mx-auto">
-        <h1 class="text-4xl md:text-5xl font-black uppercase tracking-tighter">Visualisasi Algoritma A*</h1>
-        <p class="mt-2 text-lg font-bold border-t-4 border-black pt-2 inline-block">f(n) = g(n) + h(n)</p>
+    <header class="bg-[#a3e635] brutal-border brutal-shadow p-4 sm:p-6 mb-8 text-center max-w-[1400px] mx-auto overflow-hidden">
+        <h1 class="text-3xl sm:text-4xl md:text-5xl font-black uppercase tracking-tighter break-words">Visualisasi Algoritma A*</h1>
+        <p class="mt-2 text-base sm:text-lg font-bold border-t-4 border-black pt-2 inline-block">f(n) = g(n) + h(n)</p>
     </header>
 
-    <main class="max-w-[1400px] mx-auto grid grid-cols-1 xl:grid-cols-12 gap-8">
+    <main class="max-w-[1400px] mx-auto grid grid-cols-1 lg:grid-cols-12 gap-8">
         
-        <section class="xl:col-span-7 bg-white brutal-border brutal-shadow p-6 flex flex-col justify-between">
+        <section id="canvas-section" class="lg:col-span-7 bg-white brutal-border brutal-shadow p-4 sm:p-6 flex flex-col justify-between scroll-mt-6">
             <div>
-                <h2 class="text-2xl font-black mb-4 uppercase bg-[#22d3ee] inline-block px-3 py-1 brutal-border brutal-shadow-sm">
+                <h2 class="text-xl sm:text-2xl font-black mb-4 uppercase bg-[#22d3ee] inline-block px-3 py-1 brutal-border brutal-shadow-sm">
                     Kanvas Peta
                 </h2>
                 
-                <p class="text-sm font-bold mb-5 bg-[#fde047] p-3 brutal-border">
-                    TARIK & GESER KURSOR untuk membuat dinding rintangan. Tekan MULAI untuk melihat pencarian.
+                <p class="text-xs sm:text-sm font-bold mb-5 bg-[#fde047] p-3 brutal-border">
+                    Geser (Drag) START atau GOAL untuk mengubah posisi. Tarik pada kotak kosong untuk menggambar dinding rintangan.
                 </p>
 
                 <div class="flex justify-center mb-6">
-                    <div id="grid-container" class="grid gap-0 brutal-border brutal-shadow bg-black p-1 select-none cursor-pointer w-full max-w-[600px] aspect-square">
+                    <div id="grid-container" class="grid gap-0 brutal-border brutal-shadow bg-black p-1 select-none w-full max-w-[600px] aspect-square relative">
                         </div>
                 </div>
 
-                <div class="bg-white p-4 brutal-border brutal-shadow-sm font-bold text-xs md:text-sm">
-                    <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-3">
-                        <div class="flex items-center gap-2"><div class="w-6 h-6 bg-[#4ade80] brutal-border"></div> START</div>
-                        <div class="flex items-center gap-2"><div class="w-6 h-6 bg-[#f87171] brutal-border"></div> GOAL</div>
-                        <div class="flex items-center gap-2"><div class="w-6 h-6 bg-black brutal-border"></div> DINDING</div>
-                        <div class="flex items-center gap-2"><div class="w-6 h-6 bg-[#ff00ff] brutal-border"></div> JALUR AKHIR</div>
-                        <div class="flex items-center gap-2"><div class="w-6 h-6 bg-[#8b5cf6] brutal-border"></div> AKTIF</div>
-                        <div class="flex items-center gap-2"><div class="w-6 h-6 bg-[#22d3ee] brutal-border"></div> OPEN SET</div>
-                        <div class="flex items-center gap-2"><div class="w-6 h-6 bg-[#f472b6] brutal-border"></div> CLOSED SET</div>
+                <div class="bg-white p-3 sm:p-4 brutal-border brutal-shadow-sm font-bold text-[10px] sm:text-xs md:text-sm">
+                    <div class="flex flex-wrap gap-3 sm:gap-4 mb-2">
+                        <div class="flex items-center gap-1.5 sm:gap-2"><div class="w-5 h-5 sm:w-6 sm:h-6 bg-[#4ade80] brutal-border"></div> START</div>
+                        <div class="flex items-center gap-1.5 sm:gap-2"><div class="w-5 h-5 sm:w-6 sm:h-6 bg-[#f87171] brutal-border"></div> GOAL</div>
+                        <div class="flex items-center gap-1.5 sm:gap-2"><div class="w-5 h-5 sm:w-6 sm:h-6 bg-black brutal-border"></div> DINDING</div>
+                        <div class="flex items-center gap-1.5 sm:gap-2"><div class="w-5 h-5 sm:w-6 sm:h-6 bg-[#ff00ff] brutal-border"></div> JALUR AKHIR</div>
+                        <div class="flex items-center gap-1.5 sm:gap-2"><div class="w-5 h-5 sm:w-6 sm:h-6 bg-[#8b5cf6] brutal-border"></div> AKTIF</div>
+                        <div class="flex items-center gap-1.5 sm:gap-2"><div class="w-5 h-5 sm:w-6 sm:h-6 bg-[#22d3ee] brutal-border"></div> OPEN SET</div>
+                        <div class="flex items-center gap-1.5 sm:gap-2"><div class="w-5 h-5 sm:w-6 sm:h-6 bg-[#f472b6] brutal-border"></div> CLOSED SET</div>
                     </div>
                 </div>
             </div>
 
-            <div class="mt-6 p-4 bg-[#e5e5e5] brutal-border flex flex-wrap gap-4 justify-between items-center">
-                <div class="flex flex-wrap gap-3 w-full sm:w-auto">
-                    <button id="btn-start" class="brutal-btn flex-1 sm:flex-none px-6 py-3 bg-[#a3e635] brutal-border brutal-shadow-sm font-black uppercase text-sm">
+            <div class="mt-6 p-3 sm:p-4 bg-[#e5e5e5] brutal-border flex flex-col md:flex-row gap-4 justify-between items-center">
+                <div class="flex flex-col sm:flex-row gap-3 w-full md:w-auto">
+                    <button id="btn-start" class="brutal-btn w-full sm:w-auto px-4 sm:px-6 py-3 bg-[#a3e635] brutal-border brutal-shadow-sm font-black uppercase text-xs sm:text-sm">
                         Mulai Pencarian
                     </button>
-                    <button id="btn-clear-walls" class="brutal-btn flex-1 sm:flex-none px-4 py-3 bg-white brutal-border brutal-shadow-sm font-bold uppercase text-sm">
-                        Hapus Dinding
-                    </button>
-                    <button id="btn-reset" class="brutal-btn flex-1 sm:flex-none px-4 py-3 bg-[#f87171] brutal-border brutal-shadow-sm font-bold uppercase text-white text-sm">
-                        Reset Peta
-                    </button>
+                    <div class="flex gap-3 w-full sm:w-auto">
+                        <button id="btn-clear-walls" class="brutal-btn flex-1 px-2 sm:px-4 py-3 bg-white brutal-border brutal-shadow-sm font-bold uppercase text-[10px] sm:text-xs">
+                            Hapus Dinding
+                        </button>
+                        <button id="btn-reset" class="brutal-btn flex-1 px-2 sm:px-4 py-3 bg-[#f87171] brutal-border brutal-shadow-sm font-bold uppercase text-white text-[10px] sm:text-xs">
+                            Reset Peta
+                        </button>
+                    </div>
                 </div>
-                <div class="flex items-center gap-3 w-full sm:w-auto bg-white p-2 brutal-border">
-                    <label class="text-sm font-bold uppercase">Kecepatan</label>
-                    <input id="speed-range" type="range" min="1" max="200" value="80" class="w-24 border-2 border-black accent-black">
+                <div class="flex justify-between items-center gap-3 w-full md:w-auto bg-white p-2 brutal-border">
+                    <label class="text-xs sm:text-sm font-bold uppercase">Kecepatan</label>
+                    <input id="speed-range" type="range" min="1" max="200" value="80" class="w-full md:w-24 border-2 border-black accent-black">
                 </div>
             </div>
         </section>
 
-        <section class="xl:col-span-5 flex flex-col gap-8">
-            
-            <div class="bg-[#8b5cf6] brutal-border brutal-shadow p-6 text-white">
-                <h3 class="text-2xl font-black mb-4 uppercase bg-black text-white inline-block px-3 py-1">
+        <section class="lg:col-span-5 flex flex-col gap-6 sm:gap-8">
+            <div class="bg-[#8b5cf6] brutal-border brutal-shadow p-4 sm:p-6 text-white">
+                <h3 class="text-xl sm:text-2xl font-black mb-4 uppercase bg-black text-white inline-block px-3 py-1">
                     Pelacakan Skor Aktif
                 </h3>
                 
-                <div id="calc-panel-empty" class="bg-white text-black brutal-border p-6 font-bold text-center">
+                <div id="calc-panel-empty" class="bg-white text-black brutal-border p-4 sm:p-6 font-bold text-center text-sm sm:text-base">
                     MENUNGGU ALGORITMA BERJALAN...
                 </div>
 
-                <div id="calc-panel-content" class="hidden bg-white text-black brutal-border p-5 space-y-4 font-black">
-                    <div class="flex justify-between items-center bg-[#e5e5e5] p-2 brutal-border">
+                <div id="calc-panel-content" class="hidden bg-white text-black brutal-border p-3 sm:p-5 space-y-4 font-black">
+                    <div class="flex justify-between items-center bg-[#e5e5e5] p-2 brutal-border text-sm sm:text-base">
                         <span class="uppercase">Posisi Node</span>
-                        <div id="calc-node-coords" class="text-xl bg-black text-white px-2">[-,-]</div>
+                        <div id="calc-node-coords" class="text-lg sm:text-xl bg-black text-white px-2">[-,-]</div>
                     </div>
                     
-                    <div class="grid grid-cols-2 gap-4">
-                        <div class="brutal-border p-3 flex flex-col items-center bg-[#4ade80]">
-                            <span class="text-sm uppercase mb-1">Actual Cost g(n)</span>
-                            <div id="calc-g-val" class="text-4xl bg-white brutal-border w-full text-center py-2">0</div>
+                    <div class="grid grid-cols-2 gap-3 sm:gap-4">
+                        <div class="brutal-border p-2 sm:p-3 flex flex-col items-center bg-[#4ade80]">
+                            <span class="text-[10px] sm:text-sm uppercase mb-1 text-center">Actual Cost g(n)</span>
+                            <div id="calc-g-val" class="text-2xl sm:text-4xl bg-white brutal-border w-full text-center py-1 sm:py-2">0</div>
                         </div>
-                        <div class="brutal-border p-3 flex flex-col items-center bg-[#f87171]">
-                            <span class="text-sm uppercase mb-1">Heuristic h(n)</span>
-                            <div id="calc-h-val" class="text-4xl bg-white brutal-border w-full text-center py-2">0</div>
+                        <div class="brutal-border p-2 sm:p-3 flex flex-col items-center bg-[#f87171]">
+                            <span class="text-[10px] sm:text-sm uppercase mb-1 text-center">Heuristic h(n)</span>
+                            <div id="calc-h-val" class="text-2xl sm:text-4xl bg-white brutal-border w-full text-center py-1 sm:py-2">0</div>
                         </div>
                     </div>
                     
-                    <div class="brutal-border p-4 flex flex-col items-center bg-[#fde047]">
-                        <span class="text-sm uppercase mb-1">Total Cost f(n)</span>
-                        <div id="calc-f-val" class="text-6xl text-center">0</div>
+                    <div class="brutal-border p-3 sm:p-4 flex flex-col items-center bg-[#fde047]">
+                        <span class="text-xs sm:text-sm uppercase mb-1">Total Cost f(n)</span>
+                        <div id="calc-f-val" class="text-4xl sm:text-6xl text-center">0</div>
                     </div>
                 </div>
             </div>
 
-            <div class="bg-white brutal-border brutal-shadow p-6">
-                <h3 class="text-xl font-black mb-4 uppercase border-b-4 border-black pb-2">Kamus Algoritma</h3>
-                <ul class="space-y-4 font-bold text-sm">
+            <div class="bg-white brutal-border brutal-shadow p-4 sm:p-6">
+                <h3 class="text-lg sm:text-xl font-black mb-4 uppercase border-b-4 border-black pb-2">Kamus Algoritma</h3>
+                <ul class="space-y-4 font-bold text-xs sm:text-sm">
                     <li class="flex gap-3">
-                        <span class="bg-[#4ade80] brutal-border px-2 py-1 text-black h-fit">g(n)</span>
+                        <span class="bg-[#4ade80] brutal-border px-2 py-1 text-black h-fit shrink-0">g(n)</span>
                         <p>Biaya riil/aktual yang sudah dihabiskan dari titik Start ke Node saat ini.</p>
                     </li>
                     <li class="flex gap-3">
-                        <span class="bg-[#f87171] brutal-border px-2 py-1 text-black h-fit">h(n)</span>
+                        <span class="bg-[#f87171] brutal-border px-2 py-1 text-black h-fit shrink-0">h(n)</span>
                         <p>Estimasi (Heuristik) jarak lurus dari Node saat ini ke titik Goal.</p>
                     </li>
                     <li class="flex gap-3">
-                        <span class="bg-[#fde047] brutal-border px-2 py-1 text-black h-fit">f(n)</span>
+                        <span class="bg-[#fde047] brutal-border px-2 py-1 text-black h-fit shrink-0">f(n)</span>
                         <p>Total estimasi biaya. Algoritma akan mencari rute dengan <strong>total cost terkecil</strong>.</p>
                     </li>
                 </ul>
@@ -197,11 +211,68 @@
         let grid = [];
         let startNode = null;
         let endNode = null;
+        
+        // Status Interaksi
         let isMouseDown = false;
         let isSearching = false;
+        let isDraggingStart = false;
+        let isDraggingEnd = false;
+        let drawWallMode = true; // True = menggambar dinding, False = menghapus dinding
 
         const calcEmpty = document.getElementById('calc-panel-empty');
         const calcContent = document.getElementById('calc-panel-content');
+
+        // ==== SISTEM AUDIO ====
+        let audioCtx = null;
+        function initAudio() {
+            if (!audioCtx) {
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            }
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+        }
+
+        function playSound(type) {
+            if (!audioCtx) return;
+            const osc = audioCtx.createOscillator();
+            const gainNode = audioCtx.createGain();
+            osc.connect(gainNode);
+            gainNode.connect(audioCtx.destination);
+            const now = audioCtx.currentTime;
+
+            if (type === 'search') {
+                osc.type = 'square';
+                osc.frequency.setValueAtTime(400 + Math.random() * 300, now);
+                gainNode.gain.setValueAtTime(0.02, now);
+                gainNode.gain.exponentialRampToValueAtTime(0.001, now + 0.05);
+                osc.start(now);
+                osc.stop(now + 0.05);
+            } else if (type === 'path') {
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(800, now);
+                gainNode.gain.setValueAtTime(0.05, now);
+                gainNode.gain.exponentialRampToValueAtTime(0.001, now + 0.1);
+                osc.start(now);
+                osc.stop(now + 0.1);
+            } else if (type === 'success') {
+                osc.type = 'triangle';
+                osc.frequency.setValueAtTime(523.25, now); 
+                osc.frequency.setValueAtTime(659.25, now + 0.1); 
+                osc.frequency.setValueAtTime(783.99, now + 0.2); 
+                osc.frequency.setValueAtTime(1046.50, now + 0.3); 
+                gainNode.gain.setValueAtTime(0.1, now);
+                gainNode.gain.linearRampToValueAtTime(0, now + 0.6);
+                osc.start(now);
+                osc.stop(now + 0.6);
+            } else if (type === 'error') {
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(150, now);
+                gainNode.gain.setValueAtTime(0.1, now);
+                gainNode.gain.linearRampToValueAtTime(0, now + 0.5);
+                osc.start(now);
+                osc.stop(now + 0.5);
+            }
+        }
+        // =======================
 
         class Node {
             constructor(row, col) {
@@ -231,7 +302,9 @@
                     if (node.isEnd) endNode = node;
                     
                     const cellDiv = document.createElement('div');
-                    cellDiv.className = 'cell bg-white border border-black w-full h-full flex flex-col items-center justify-center relative overflow-hidden font-bold';
+                    cellDiv.className = 'cell bg-white border border-black w-full h-full relative overflow-hidden font-bold';
+                    cellDiv.dataset.r = r; // Simpan koordinat di dataset untuk mobile
+                    cellDiv.dataset.c = c;
                     
                     if (node.isStart) {
                         cellDiv.classList.replace('bg-white', 'bg-[#4ade80]');
@@ -243,28 +316,56 @@
                     }
                     
                     const scoreContainer = document.createElement('div');
-                    scoreContainer.classList.add('hidden', 'w-full', 'h-full', 'flex', 'flex-col', 'items-center', 'justify-center', 'text-[9px]', 'leading-none');
-                    
+                    scoreContainer.classList.add('hidden', 'absolute', 'inset-0', 'flex', 'flex-col', 'items-center', 'justify-center', 'leading-none', 'pointer-events-none');
                     scoreContainer.innerHTML = `
-                        <div class="flex gap-1 mb-0.5">
+                        <div class="flex gap-[1px] md:gap-1 mb-[1px] md:mb-0.5 text-[5px] sm:text-[7px] md:text-[9px]">
                             <span class="score-g text-[#166534]"></span>
                             <span class="score-h text-[#991b1b]"></span>
                         </div>
-                        <div class="font-black text-[12px] score-f text-black"></div>
+                        <div class="font-black text-[7px] sm:text-[10px] md:text-[12px] score-f text-black leading-none"></div>
                     `;
 
                     cellDiv.appendChild(scoreContainer);
                     node.element = cellDiv;
                     node.scoreElement = scoreContainer;
                     
-                    cellDiv.addEventListener('mousedown', () => {
-                        if (isSearching || node.isStart || node.isEnd) return;
-                        isMouseDown = true;
-                        toggleWall(node);
+                    // --- EVENT LISTENER (MOUSE) ---
+                    cellDiv.addEventListener('mousedown', (e) => {
+                        if (isSearching) return;
+                        e.preventDefault();
+                        if (node.isStart) {
+                            isDraggingStart = true;
+                            node.element.classList.add('dragging-node');
+                        } else if (node.isEnd) {
+                            isDraggingEnd = true;
+                            node.element.classList.add('dragging-node');
+                        } else {
+                            isMouseDown = true;
+                            drawWallMode = !node.isWall; // Tentukan apakah kuas berfungsi sebagai penghapus atau spidol
+                            setWall(node, drawWallMode);
+                        }
                     });
+
                     cellDiv.addEventListener('mouseenter', () => {
-                        if (isMouseDown && !isSearching && !node.isStart && !node.isEnd) {
-                            toggleWall(node);
+                        if (isSearching) return;
+                        if (isDraggingStart) moveStartNode(node);
+                        else if (isDraggingEnd) moveEndNode(node);
+                        else if (isMouseDown) setWall(node, drawWallMode);
+                    });
+                    
+                    // --- EVENT LISTENER (TOUCH / HP) ---
+                    cellDiv.addEventListener('touchstart', (e) => {
+                        if (isSearching) return;
+                        if (node.isStart) {
+                            isDraggingStart = true;
+                            node.element.classList.add('dragging-node');
+                        } else if (node.isEnd) {
+                            isDraggingEnd = true;
+                            node.element.classList.add('dragging-node');
+                        } else {
+                            isMouseDown = true;
+                            drawWallMode = !node.isWall;
+                            setWall(node, drawWallMode);
                         }
                     });
 
@@ -275,10 +376,43 @@
             }
         }
 
-        window.addEventListener('mouseup', () => isMouseDown = false);
+        // Global Event Listeners untuk Dragging
+        window.addEventListener('mouseup', endInteractions);
+        window.addEventListener('touchend', endInteractions);
+        window.addEventListener('touchcancel', endInteractions);
 
-        function toggleWall(node) {
-            node.isWall = !node.isWall;
+        // Global Touch Move untuk Mobile
+        gridContainer.addEventListener('touchmove', (e) => {
+            if (isSearching) return;
+            e.preventDefault(); // Mencegah scrolling browser saat menggambar
+            
+            let touch = e.touches[0];
+            let target = document.elementFromPoint(touch.clientX, touch.clientY);
+            
+            if (target && target.closest('.cell')) {
+                let cellElement = target.closest('.cell');
+                let r = parseInt(cellElement.dataset.r);
+                let c = parseInt(cellElement.dataset.c);
+                let hoverNode = grid[r][c];
+
+                if (isDraggingStart) moveStartNode(hoverNode);
+                else if (isDraggingEnd) moveEndNode(hoverNode);
+                else if (isMouseDown) setWall(hoverNode, drawWallMode);
+            }
+        }, { passive: false });
+
+        function endInteractions() {
+            isMouseDown = false;
+            isDraggingStart = false;
+            isDraggingEnd = false;
+            startNode.element.classList.remove('dragging-node');
+            endNode.element.classList.remove('dragging-node');
+        }
+
+        // --- FUNGSI MENGUBAH POSISI & DINDING ---
+        function setWall(node, isWall) {
+            if (node.isStart || node.isEnd) return;
+            node.isWall = isWall;
             if (node.isWall) {
                 node.element.classList.remove('bg-white', 'cell-visited', 'cell-path');
                 node.element.classList.add('bg-black');
@@ -289,6 +423,43 @@
             }
         }
 
+        function moveStartNode(node) {
+            if (node === startNode || node === endNode) return;
+            resetVisualizationData();
+            
+            // Bersihkan node lama
+            startNode.isStart = false;
+            startNode.element.classList.remove('bg-[#4ade80]', 'border-2', 'dragging-node');
+            if (!startNode.isWall) startNode.element.classList.add('bg-white');
+            
+            // Terapkan ke node baru
+            node.isStart = true;
+            node.isWall = false; // Timpa dinding jika ada
+            node.element.classList.remove('bg-black', 'bg-white');
+            node.element.classList.add('bg-[#4ade80]', 'border-2', 'dragging-node');
+            node.scoreElement.classList.add('hidden');
+            startNode = node;
+        }
+
+        function moveEndNode(node) {
+            if (node === endNode || node === startNode) return;
+            resetVisualizationData();
+            
+            // Bersihkan node lama
+            endNode.isEnd = false;
+            endNode.element.classList.remove('bg-[#f87171]', 'border-2', 'dragging-node');
+            if (!endNode.isWall) endNode.element.classList.add('bg-white');
+            
+            // Terapkan ke node baru
+            node.isEnd = true;
+            node.isWall = false;
+            node.element.classList.remove('bg-black', 'bg-white');
+            node.element.classList.add('bg-[#f87171]', 'border-2', 'dragging-node');
+            node.scoreElement.classList.add('hidden');
+            endNode = node;
+        }
+
+        // --- FUNGSI UPDATE UI ---
         function updateCellScore(node) {
             if (node.isStart || node.isWall) return;
             node.scoreElement.classList.remove('hidden');
@@ -325,9 +496,14 @@
             return new Promise(resolve => setTimeout(resolve, ms));
         }
 
+        // --- ALGORITMA UTAMA ---
         async function runAStar() {
             if (isSearching) return;
             isSearching = true;
+            initAudio();
+            
+            // Auto-scroll fokus ke kanvas
+            document.getElementById('canvas-section').scrollIntoView({ behavior: 'smooth', block: 'start' });
 
             const speedInput = document.getElementById('speed-range');
             const getDelay = () => 205 - parseInt(speedInput.value);
@@ -357,6 +533,7 @@
                 }
 
                 updateLiveCalcPanel(current);
+                playSound('search');
                 await sleep(getDelay());
 
                 if (current === endNode) {
@@ -393,12 +570,13 @@
                         if (!openSet.includes(neighbor)) {
                             openSet.push(neighbor);
                             if (neighbor !== endNode) {
-                                neighbor.element.classList.add('bg-[#22d3ee]'); // Open set color
+                                neighbor.element.classList.add('bg-[#22d3ee]');
                             }
                         }
                     }
                 }
             }
+            playSound('error');
             alert("JALUR BUNTU!");
             isSearching = false;
         }
@@ -408,16 +586,17 @@
             calcEmpty.classList.remove('hidden');
             calcContent.classList.add('hidden');
             calcEmpty.textContent = "RUTE TERPENDEK DITEMUKAN!";
-            calcEmpty.classList.replace('bg-white', 'bg-[#ff00ff]'); // Mengubah warna notifikasi ke Magenta
+            calcEmpty.classList.replace('bg-white', 'bg-[#ff00ff]');
             calcEmpty.classList.add('text-white');
             
             while (temp && temp !== startNode) {
-                temp.scoreElement.classList.add('hidden');
                 temp.element.classList.remove('cell-visited', 'bg-[#22d3ee]');
                 temp.element.classList.add('cell-path');
+                playSound('path');
                 temp = temp.parent;
-                await sleep(50);
+                await sleep(60);
             }
+            playSound('success');
         }
 
         function resetVisualizationData() {
@@ -432,7 +611,7 @@
                     
                     if (!node.isStart && !node.isEnd && !node.isWall) {
                         node.scoreElement.classList.add('hidden');
-                        node.element.className = 'cell bg-white border border-black w-full h-full flex flex-col items-center justify-center relative overflow-hidden font-bold';
+                        node.element.className = 'cell bg-white border border-black w-full h-full relative overflow-hidden font-bold';
                         
                         const fText = node.scoreElement.querySelector('.score-f');
                         const gText = node.scoreElement.querySelector('.score-g');
@@ -455,7 +634,7 @@
             if (isSearching) return;
             for (let r = 0; r < GRID_SIZE; r++) {
                 for (let c = 0; c < GRID_SIZE; c++) {
-                    if (grid[r][c].isWall) toggleWall(grid[r][c]);
+                    if (grid[r][c].isWall) setWall(grid[r][c], false);
                 }
             }
             resetVisualizationData();
